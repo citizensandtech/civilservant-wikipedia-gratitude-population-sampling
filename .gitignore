@@ -1,1 +1,11 @@
 cache/*
+
+\.idea/
+
+\.ipynb_checkpoints/
+
+outputs/
+
+*.sh~
+
+\.env
