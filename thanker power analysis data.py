@@ -176,6 +176,7 @@ def add_blocks(start_date, end_date, col_label, df):
     user_ban_counts['user_id'] = user_ban_counts['user_id'].apply(int)
 
     df = pd.merge(df, user_ban_counts, on=['lang', 'user_id'], how='left').rename(columns={0:col_label})
+    df[col_label] = df[col_label].fillna(0)
     return df
 
 #@timeit
@@ -270,7 +271,7 @@ def create_reverts_df(df, start_date, end_date):
             tries = 0
             while tries<5:
                 try:
-                    print(f'working on user_id {user_id} having {len(user_df)} edits')
+                    # print(f'working on user_id {user_id} having {len(user_df)} edits')
                     user_revert_df = get_num_reverts(lang, user_id, user_df, start_date, end_date, schema)
                     reverts_dfs.append(user_revert_df)
                     count += 1
