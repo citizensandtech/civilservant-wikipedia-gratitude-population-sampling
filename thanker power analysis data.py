@@ -5,17 +5,18 @@ import json
 import requests
 
 from sqlalchemy import create_engine
-from sqlalchemy.exc import ProgrammingError
-from pymysql.err import InternalError, OperationalError
+from sqlalchemy.exc import ProgrammingError, OperationalError
+from pymysql.err import InternalError
 import sys, os
 import pandas as pd
 import numpy as np
 
 import mwclient
-import mwviews
 import mwapi
 import mwreverts
 import mwreverts.api
+import mwreverts.db
+import mwdb
 
 from datetime import datetime as dt
 from datetime import timedelta as td
@@ -65,10 +66,6 @@ con = create_engine(constr, encoding='utf-8')
 
 
 con.execute(f'use enwiki_p;')
-
-
-# In[3]:
-
 
 #POPULATIONS
 
@@ -233,19 +230,23 @@ def cache_all_user_edits(df):
 
 
 # REVERTS
-def get_num_reverts(lang, user_id, user_df, start_date, end_date):
+
+ 
+def get_num_reverts(lang, user_id, user_df, start_date, end_date, schema):
     cache_key = f'cache/reverts/{lang}_{user_id}_{start_date}_{end_date}.pickle'
     if os.path.exists(cache_key):
         return pd.read_pickle(cache_key)
     else:
-        session = mwapi.Session(f"https://{lang}.wikipedia.org", user_agent="max.klein@civilservant.io gratitude power analysis generator")
+        #session = mwapi.Session(f"https://{lang}.wikipedia.org", user_agent="max.klein@civilservant.io gratitude power analysis generator")
+
         revertings = 0
         for rev_id in user_df['rev_id'].values:
             try:
-                reverting, reverted, reverted_to = mwreverts.api.check(session, rev_id)
+                #reverting, reverted, reverted_to = mwreverts.api.check(session, rev_id)
+                reverting, reverted, reverted_to = mwreverts.db.check(schema, rev_id)
                 if reverting:
                     revertings += 1
-            except mwapi.session.APIError:
+            except (mwapi.session.APIError, TypeError):
                 continue
         col_name_suffix = 'pre' if start_date < sim_treatment_date else 'post'
         col_name = f'num_reverts_90_{col_name_suffix}_treatment'
@@ -253,20 +254,33 @@ def get_num_reverts(lang, user_id, user_df, start_date, end_date):
         user_reverts_df.to_pickle(cache_key)
         return user_reverts_df
 
+def get_schema(lang):
+    return mwdb.Schema(f"mysql+pymysql://{lang}wiki.labsdb/{lang}wiki_p?read_default_file=~/replica.my.cnf", only_tables=['revision'])
+
+    
 def create_reverts_df(df, start_date, end_date):
     count = 0
     reverts_dfs = []
     for lang in lang_sqlparams.keys():
-            user_ids = df[df['lang']==lang]['user_id'].values
-            for user_id in user_ids:
-#                 if count % 1000 == 0:
-#                     print(f'Count {count} lang {lang} userid {user_id}')
-                user_df = get_user_edits(lang, user_id, start_date, end_date)
-                t0 = time.time()
-                user_revert_df = get_num_reverts(lang, user_id, user_df, start_date, end_date)
-#                 print(f'user_id {user_id} took {time.time()-t0} to get reverts')
-                reverts_dfs.append(user_revert_df)
-                count += 1
+        schema = get_schema(lang)
+        user_ids = df[df['lang']==lang]['user_id'].values
+        for user_id in user_ids:
+            user_df = get_user_edits(lang, user_id, start_date, end_date)
+            t0 = time.time()
+            tries = 0
+            while tries<5:
+                try:
+                    print(f'working on user_id {user_id} having {len(user_df)} edits')
+                    user_revert_df = get_num_reverts(lang, user_id, user_df, start_date, end_date, schema)
+                    reverts_dfs.append(user_revert_df)
+                    count += 1
+                    break
+                except OperationalError as e:
+                    print(e)
+                    print(f'try: {tries}')
+                    tries += 1
+                    if tries > 5:
+                        raise e
     reverts_df = pd.concat(reverts_dfs)
     return reverts_df
 
@@ -357,7 +371,7 @@ class preloaded_csvs():
             grat_df = pd.read_csv(csv_path, usecols=['timestamp', 'sender_id'], parse_dates=[0])
             self.path_dfs[csv_path] = grat_df
             return grat_df
-        
+
 
 def get_num_grats(lang, user_id, user_df, start_date, end_date, grat_type, preloaded):
     cache_key = f'cache/{grat_type}/{lang}_{user_id}_{start_date}_{end_date}.pickle'
@@ -454,7 +468,8 @@ def make_data(subsample=None):
   df = add_blocks_pre_treatment(df)
   df = add_blocks_post_treatment(df)
   # get user edits:
-  cache_all_user_edits(df)
+  #print('cache user edits')
+  #cache_all_user_edits(df)
   
   print('adding reverts')
   df = add_revert_actions_pre_treatment(df)
