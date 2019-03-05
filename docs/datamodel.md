@@ -49,11 +49,16 @@
 + oldRevUser
 + oldRevComment
 
+## worksets
+###
++ workset_id
++ task_id
+
 ## tasks
 ### a collection of edits for thanking consideration
 + task_id
++ cand_id
 + edits (json list) (how to make dynamic in case of skipping?)
-
 
 ##  task_responses
 + task_response_id (internal)
