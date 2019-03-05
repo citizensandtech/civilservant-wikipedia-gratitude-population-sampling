@@ -49,13 +49,14 @@
 + oldRevUser
 + oldRevComment
 
-## worksets
+## tasks
 ### a collection of edits for thanking consideration
-+ worsket_id
-+ edits (how to make dynamic in case of skipping?)
++ task_id
++ edits (json list) (how to make dynamic in case of skipping?)
 
-##  workset_responses
-+ response_id (internal)
-+ cand_id (foreign)
+
+##  task_responses
++ task_response_id (internal)
++ task_id
 + responder_id (wikipedia user id)
 + action (enum[editid, or "SKIP"])
