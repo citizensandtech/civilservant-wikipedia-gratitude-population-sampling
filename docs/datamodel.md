@@ -9,6 +9,7 @@
 + user_name (wikipedia user name unique to language)
 + user_reg (datetime when the wikipedia account was created)
 + edit_count (num edits on wiki)
++ experience_level (enum[newcomer, or experienced])
 + thanks_sent (num thanks sent on wiki)
 + thanks_received (num thanks received on wiki)
 + has_email (user can be emailed via wiki)
