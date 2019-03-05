@@ -23,6 +23,7 @@
 
 ## edits
 + edit_id (internal)
++ lang
 + rev_id (wikipedia id unique to lang)
 + page_name
 + page_id
@@ -36,7 +37,8 @@
 
 
 ## edits_display
-+ html_blob
++ edit_id (internal)
++ diffHTML
 + lang (redundant, could not store)
 + newRevId (redundant, could not store)
 + newRevDate (redundant, could not store)
