@@ -38,6 +38,7 @@
 
 ## edits_display
 + edit_id (internal)
++ edit_exists (bool)
 + diffHTML
 + lang (redundant, could not store)
 + newRevId (redundant, could not store)
