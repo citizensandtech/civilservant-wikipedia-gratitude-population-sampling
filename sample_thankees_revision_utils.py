@@ -167,7 +167,6 @@ def get_ores_data_dgf_from_api(rev_ids, context_lang):
 
 def ores_quality_getter(rev_ids, context_lang):
     scores = get_ores_data_dgf_from_api(rev_ids, context_lang)
-    print('predictions_ndgf:', scores)
     #     print([s for s in scores])
     try:
         predictions = [(sc['damaging']['score']['prediction'], sc['goodfaith']['score']['prediction']) for sc in scores]
