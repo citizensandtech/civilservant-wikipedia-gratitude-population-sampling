@@ -17,6 +17,7 @@ def make_cached_df(cache_sub_dir):
             str_args = "_".join([str(a) for a in args])
             str_args = str_args.replace('/', '___')
             fname = f'{str_args}'
+            fname = fname[:255] # these can get long
             cache_key = os.path.join(cache_dir, fname)
             try:
                 return pd.read_pickle(cache_key)

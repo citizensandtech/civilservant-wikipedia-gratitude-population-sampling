@@ -1,4 +1,9 @@
-from wikipedia_helpers import to_wmftimestamp, from_wmftimestamp, decode_or_nan, make_wmf_con
+import sqlalchemy
+
+from sample_thankees_revision_utils import num_quality_revisions, get_timestamps_within_range, get_recent_edits, \
+    get_recent_edits_alias
+from wikipedia_helpers import to_wmftimestamp, from_wmftimestamp, decode_or_nan, make_wmf_con, calc_labour_hours, \
+    ts_in_week, window_seq
 
 import sys, os
 import pandas as pd
@@ -6,6 +11,7 @@ from cached_df import make_cached_df
 
 from datetime import datetime as dt
 from datetime import timedelta as td
+from IPython import embed
 
 
 def sample_thankees_group_oriented(lang, db_con):
@@ -55,7 +61,7 @@ def get_users_edit_spans(lang, start_date, end_date, wmf_con):
     """
     db_prefix = f'{lang}wiki_p'
     wmf_con.execute(f'use {db_prefix};')
-    reg_sql = '''select '{lang}' as lang, user_id, user_name, user_registration,
+    reg_sql = '''select '{lang}' as lang, user_id, user_name, user_registration, edit_count as live_edit_count
        (select min(rev_timestamp) from revision_userindex where rev_user=user_id and {start_date} <= rev_timestamp <= {end_date}) as first_edit, 
        (select max(rev_timestamp) from revision_userindex where rev_user=user_id and {start_date} <= rev_timestamp <= {end_date}) as last_edit
 from user where coalesce(user_registration, 20010101000000) <= {end_date} 
@@ -81,10 +87,15 @@ def make_populations(start_date, end_date, wmf_con):
     return pd.concat(span_dfs)
 
 
-def remove_inactive_users(df):
-    """remove users who have no edits in the period"""
-    return df[(pd.notnull(df['first_edit'])) | (pd.notnull(df['last_edit']))]
-
+def remove_inactive_users(df, start_date, end_date):
+    """remove users who have no edits in the period
+    :param start_date:
+    :param end_date:
+    """
+    active_df = df[(pd.notnull(df['first_edit'])) | (pd.notnull(df['last_edit']))].copy()
+    days_between = end_date - start_date
+    active_df[f'active_in_{days_between.days}_pre_treatment'] = True
+    return active_df
 
 @make_cached_df('disablemail')
 def get_user_disablemail_properties(lang, user_id, wmf_con):
@@ -98,7 +109,8 @@ def get_user_disablemail_properties(lang, user_id, wmf_con):
 def add_has_email_currently(df, wmf_con):
     user_prop_dfs = []
     for lang in langs:
-        user_ids = user_ids = df[df['lang'] == lang]['user_id'].values
+        user_ids = df[df['lang'] == lang]['user_id'].values
+        # print(f'{lang} has {len(user_ids)} disablemails to get')
         for user_id in user_ids:
             user_prop_df = get_user_disablemail_properties(lang, user_id, wmf_con)
             has_email = False if len(
@@ -115,15 +127,17 @@ def add_has_email_currently(df, wmf_con):
 @make_cached_df('thanks')
 def get_thanks_thanking_user(lang, user_name, start_date, end_date, wmf_con):
     wmf_con.execute(f"use {lang}wiki_p;")
-    user_thank_sql = f"""
+    user_thank_sql = """
                     select thank_timestamp, sender, receiver, ru.user_id as receiver_id, su.user_id as sender_id from
                         (select log_timestamp as thank_timestamp, replace(log_title, '_', ' ') as receiver, log_user_text as sender
-                        from logging_logindex where log_title = '{user_name.replace(' ', '')}'
+                        from logging_logindex where log_title = :user_name
                         and log_action = 'thank'
-                        and {to_wmftimestamp(start_date)} <= log_timestamp <= {to_wmftimestamp(end_date)}) t
+                        and :start_date <= log_timestamp <= :end_date ) t
                     left join user ru on ru.user_name = t.receiver
                     left join user su on su.user_name = t.sender """
-    df = pd.read_sql(user_thank_sql, wmf_con)
+    user_thank_sql_esc = sqlalchemy.text(user_thank_sql)
+    sql_params = {'user_name': user_name.replace(' ', '_'), 'start_date':to_wmftimestamp(start_date), 'end_date':to_wmftimestamp(end_date)}
+    df = pd.read_sql(user_thank_sql_esc, con=wmf_con, params=sql_params)
     df['thank_timestamp'] = df['thank_timestamp'].apply(from_wmftimestamp)
     df['sender'] = df['sender'].apply(decode_or_nan)
     df['receiver'] = df['receiver'].apply(decode_or_nan)
@@ -133,7 +147,7 @@ def get_thanks_thanking_user(lang, user_name, start_date, end_date, wmf_con):
 def add_thanks(df, start_date, end_date, col_name, wmf_con):
     user_thank_count_dfs = []
     for lang in langs:
-        user_names = user_names = df[df['lang'] == lang]['user_name'].values
+        user_names = df[df['lang'] == lang]['user_name'].values
         for user_name in user_names:
             user_thank_df = get_thanks_thanking_user(lang, user_name, start_date, end_date, wmf_con)
             user_thank_count_df = pd.DataFrame.from_dict({col_name: [len(user_thank_df)],
@@ -143,6 +157,58 @@ def add_thanks(df, start_date, end_date, col_name, wmf_con):
 
     thank_counts_df = pd.concat(user_thank_count_dfs)
     df = pd.merge(df, thank_counts_df, how='left', on=['lang', 'user_name'])
+    return df
+
+
+def add_num_quality(df, col_name, namespace_fn, end_date, wmf_con):
+    """note this get thes the number of quality revisions that are 90 days before users last edit before the end_date
+    so, it's different than num_edits_90_pre_treatment because it could go farther back"""
+    num_quality_dfs = []
+    for lang in langs:
+        user_ids = df[df['lang'] == lang]['user_id'].values
+        for user_id in user_ids:
+            # print(f'lang: {lang}, user_id: {user_id}')
+            num_quality = num_quality_revisions(user_id=user_id, lang=lang, wmf_con=wmf_con, namespace_fn=namespace_fn,
+                                                end_date=end_date)
+            user_thank_count_df = pd.DataFrame.from_dict({col_name: [num_quality],
+                                                          'user_id': [user_id],
+                                                          'lang': [lang]}, orient='columns')
+            num_quality_dfs.append(user_thank_count_df)
+
+    quality_counts_df = pd.concat(num_quality_dfs)
+    df = pd.merge(df, quality_counts_df, how='left', on=['lang', 'user_id'])
+    return df
+
+
+def add_edits_fn_by_week(df, col_name, wmf_con, timestamp_list_fn, edit_getter_fn=get_timestamps_within_range, start_date=None, end_date=None):
+    for i in range(12):
+        week_col_name = f'{col_name}_week_{i}'
+        df = add_edits_fn(df, week_col_name, wmf_con, timestamp_list_fn, edit_getter_fn=edit_getter_fn, start_date=start_date, end_date=end_date, week_number=i)
+    return df
+
+def add_edits_fn(df, col_name, wmf_con, timestamp_list_fn, edit_getter_fn=get_timestamps_within_range, start_date=None, end_date=None, week_number=None):
+    '''add the number of edits a user made within range'''
+    edit_measure_dfs =[]
+    for lang in langs:
+        user_ids = df[df['lang'] == lang]['user_id'].values
+        for user_id in user_ids:
+            ts_series = edit_getter_fn(lang, user_id, wmf_con, start_date, end_date)
+            ts_list = list(ts_series['rev_timestamp'])
+            if week_number is not None:
+                days_after_treat_start = week_number * 7
+                days_after_treat_end =  (week_number+1)* 7
+                week_start_date = start_date + td(days=days_after_treat_start)
+                week_end_date = start_date + td(days=days_after_treat_end)
+
+                ts_list = ts_in_week(ts_list, week_start_date, week_end_date)
+            edit_measure_df = pd.DataFrame.from_dict({col_name: [timestamp_list_fn(ts_list)],
+                                                          'user_id': [user_id],
+                                                          'lang': [lang]}, orient='columns')
+            edit_measure_dfs.append(edit_measure_df)
+
+    edit_measures_df = pd.concat(edit_measure_dfs)
+    df = pd.merge(df, edit_measures_df, how='left', on=['lang', 'user_id'])
+
     return df
 
 
@@ -192,51 +258,110 @@ def add_total_edits(df, start_date, end_date, wmf_con):
     return df
 
 
-def stratified_subsampler(df, sample_size):
+def remove_with_min_edit_count(df, min_edit_count=4):
+    """
+    remove all the users with less than min_edit_count
+    :param df:
+    :param min_edit_count:
+    :return:
+    """
+    return df[df['recent_edits_pre_treatment']>=min_edit_count]
+
+def stratified_subsampler(df, sample_size, newcomer_multiplier=2):
     """
     take 100 from every group except newcomers
     :param df:
     :param sample_size: the number of samples per group
     :return: sum
     """
-    from IPython import embed;
-    embed()
     subsamples = []
-    bin_groups = df.groupby(by=['lang', 'bin_name'])
-    for (is_active, lang, bin_name), group in bin_groups:
+    bin_groups = df.groupby(by=['lang', 'experience_level_pre_treatment'])
+    for (lang, bin_name), group in bin_groups:
+        n_samp = sample_size
         if bin_name == 'bin_0':
-            sample_size = sample_size * 2
-        if len(group) < sample_size:
-            sample_size = len(group)
-        subsample = group.sample(n=sample_size, random_state=1854)
+            n_samp = sample_size * newcomer_multiplier
+        if len(group) <= n_samp:
+            n_samp = len(group)
+
+        subsample = group.sample(n=n_samp, random_state=1854)
         subsamples.append(subsample)
 
     return pd.concat(subsamples)
 
+
 def make_data(subsample, wikipedia_start_date, sim_treatment_date, sim_observation_start_date, sim_experiment_end_date,
               wmf_con):
     print('starting to make data')
-
+    # embed()
     df = make_populations(start_date=wikipedia_start_date, end_date=sim_treatment_date, wmf_con=wmf_con)
-    df = remove_inactive_users(df)
+    df = remove_inactive_users(df, start_date=sim_observation_start_date, end_date=sim_treatment_date)
     if not subsample:
         output_bin_stats(df)
     df = add_experience_bin(df)
+    print('Simulated Active Editors')
+    print(df.groupby(['lang','experience_level_pre_treatment']).size())
+    if subsample:
+        print(f'make a first reasonable subsample of {10*subsample} samples per group to be able to get their edit counts beforehand')
+        print('this wouldnt be as big of a problem live because edit count is easy to get live')
+        df = stratified_subsampler(df, 10*subsample, newcomer_multiplier=5)
 
+    print('Random Stratified Subsample of active Editors to get edit counts with last 90')
+    print(df.groupby(['lang','experience_level_pre_treatment']).size())
+
+    df = add_edits_fn(df, col_name='recent_edits_pre_treatment', timestamp_list_fn=len, edit_getter_fn=get_recent_edits_alias, wmf_con=wmf_con)
+    df = remove_with_min_edit_count(df, min_edit_count=4) #  in the future remove this step by just including edit_count from the make_populations step
+    print('Random Stratified Subsample Having min 4 edits in the last 90')
+    print(df.groupby(['lang','experience_level_pre_treatment']).size())
     if subsample:
         print(f'subsetting to {subsample} samples')
         df = stratified_subsampler(df, subsample)
 
+    print('Second Random Stratified subsample to Get Edit Quality Data')
+    print(df.groupby(['lang','experience_level_pre_treatment']).size())
+
+    print("adding thanks")
     df = add_thanks(df, start_date=sim_observation_start_date, end_date=sim_treatment_date,
-                    col_name='num_thanks_received_pre_treatment', wmf_con=wmf_con)
+                    col_name='num_prev_thanks_in_90_pre_treatment', wmf_con=wmf_con)
+
+    print("adding thanks")
     df = add_total_edits(df, start_date=wikipedia_start_date, end_date=sim_treatment_date, wmf_con=wmf_con)
+    print("adding email")
     df = add_has_email_currently(df, wmf_con=wmf_con)
 
+    print("adding quality")
+    df = add_num_quality(df, col_name='num_quality_pre_treatment', wmf_con=wmf_con, namespace_fn=lambda ns: True, end_date=sim_treatment_date)
+    print("adding quality nontalk")
+    df = add_num_quality(df, col_name='num_quality_pre_treatment_non_talk', namespace_fn=lambda ns: ns %2 == 0, end_date=sim_treatment_date, wmf_con=wmf_con)
+    print("adding quality main only")
+    df = add_num_quality(df, col_name='num_quality_pre_treatment_main_only', namespace_fn=lambda ns: ns == 0, end_date=sim_treatment_date, wmf_con=wmf_con)
+
+    print('adding 90 pre treatment')
+    df = add_edits_fn(df, col_name='num_edits_90_pre_treatment', wmf_con=wmf_con, start_date=sim_observation_start_date,
+                      end_date=sim_treatment_date, timestamp_list_fn=len)
+    print('adding 90 post treatment')
+    df = add_edits_fn(df, col_name='num_edits_90_post_treatment', wmf_con=wmf_con, start_date=sim_treatment_date,
+                      end_date=sim_experiment_end_date, timestamp_list_fn=len)
+    print('adding labourhours pre treatment')
+    df = add_edits_fn(df, col_name='num_labour_hours_90_pre_treatment', wmf_con=wmf_con, start_date=sim_observation_start_date,
+                      end_date=sim_treatment_date, timestamp_list_fn=calc_labour_hours)
+    print('adding labourhours post treatment')
+    df = add_edits_fn(df, col_name='num_labour_hours_90_post_treatment', wmf_con=wmf_con, start_date=sim_treatment_date,
+                      end_date=sim_experiment_end_date, timestamp_list_fn=calc_labour_hours)
+
+    print('adding 90 post treatment by week')
+    df = add_edits_fn_by_week(df, col_name='num_edits_90_post_treatment', wmf_con=wmf_con, start_date=sim_treatment_date,
+                      end_date=sim_experiment_end_date, timestamp_list_fn=len)
+    print('adding labourhours post treatment')
+    df = add_edits_fn_by_week(df, col_name='num_labour_hours_90_post_treatment', wmf_con=wmf_con, start_date=sim_treatment_date,
+                      end_date=sim_experiment_end_date, timestamp_list_fn=calc_labour_hours)
+
+
+    print('done')
     return df
 
 
 if __name__ == "__main__":
-    subsample = os.getenv('subsample', 100)
+    subsample = os.getenv('subsample', 10)
     langs = [lang for lang in os.getenv('LANGS').split(',')]
     treatment_date_parts = [int(timepart) for timepart in os.getenv('TREATMENT_DATE').split(',')]
 
@@ -250,3 +375,5 @@ if __name__ == "__main__":
                    sim_observation_start_date=sim_observation_start_date,
                    sim_experiment_end_date=sim_experiment_end_date,
                    wmf_con=wmf_con)
+    today_str = dt.today().strftime('%Y%m%d')
+    df.to_csv(f"outputs/thankee_sampling_{subsample}_{today_str}.csv")
