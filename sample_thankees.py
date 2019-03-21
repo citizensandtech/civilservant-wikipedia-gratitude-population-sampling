@@ -61,7 +61,7 @@ def get_users_edit_spans(lang, start_date, end_date, wmf_con):
     """
     db_prefix = f'{lang}wiki_p'
     wmf_con.execute(f'use {db_prefix};')
-    reg_sql = '''select '{lang}' as lang, user_id, user_name, user_registration, edit_count as live_edit_count
+    reg_sql = '''select '{lang}' as lang, user_id, user_name, user_registration, user_editcount as live_edit_count,
        (select min(rev_timestamp) from revision_userindex where rev_user=user_id and {start_date} <= rev_timestamp <= {end_date}) as first_edit, 
        (select max(rev_timestamp) from revision_userindex where rev_user=user_id and {start_date} <= rev_timestamp <= {end_date}) as last_edit
 from user where coalesce(user_registration, 20010101000000) <= {end_date} 
@@ -361,7 +361,7 @@ def make_data(subsample, wikipedia_start_date, sim_treatment_date, sim_observati
 
 
 if __name__ == "__main__":
-    subsample = os.getenv('subsample', 10)
+    subsample = int(os.getenv('subsample', 10))
     langs = [lang for lang in os.getenv('LANGS').split(',')]
     treatment_date_parts = [int(timepart) for timepart in os.getenv('TREATMENT_DATE').split(',')]
 
