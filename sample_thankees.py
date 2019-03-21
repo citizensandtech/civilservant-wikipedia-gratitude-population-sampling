@@ -181,9 +181,11 @@ def add_num_quality(df, col_name, namespace_fn, end_date, wmf_con):
 
 
 def add_edits_fn_by_week(df, col_name, wmf_con, timestamp_list_fn, edit_getter_fn=get_timestamps_within_range, start_date=None, end_date=None):
-    for i in range(12):
+    for i in range(1, 13):
         week_col_name = f'{col_name}_week_{i}'
+        week_col_name_any = f'{col_name}_week_{i}_any'
         df = add_edits_fn(df, week_col_name, wmf_con, timestamp_list_fn, edit_getter_fn=edit_getter_fn, start_date=start_date, end_date=end_date, week_number=i)
+        df[week_col_name_any] = df[week_col_name].apply(lambda x: x>0)
     return df
 
 def add_edits_fn(df, col_name, wmf_con, timestamp_list_fn, edit_getter_fn=get_timestamps_within_range, start_date=None, end_date=None, week_number=None):
