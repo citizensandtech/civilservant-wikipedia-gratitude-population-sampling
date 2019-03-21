@@ -14,7 +14,8 @@ def make_cached_df(cache_sub_dir):
             cache_dir = os.path.join(CACHE_ROOT, cache_sub_dir)
             if not os.path.exists(cache_dir):
                 os.makedirs(cache_dir, exist_ok=True)
-            str_args = "_".join([str(a) for a in args])
+            all_args = args+tuple(kwargs.values())
+            str_args = "_".join([a.__name__ if callable(a) else str(a) for a in all_args])
             str_args = str_args.replace('/', '___')
             fname = f'{str_args}'
             fname = fname[:255] # these can get long

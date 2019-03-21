@@ -3,7 +3,7 @@ import sqlalchemy
 from sample_thankees_revision_utils import num_quality_revisions, get_timestamps_within_range, get_recent_edits, \
     get_recent_edits_alias
 from wikipedia_helpers import to_wmftimestamp, from_wmftimestamp, decode_or_nan, make_wmf_con, calc_labour_hours, \
-    ts_in_week, window_seq
+    ts_in_week, window_seq, namespace_all, namespace_mainonly, namespace_nontalk
 
 import sys, os
 import pandas as pd
@@ -331,11 +331,11 @@ def make_data(subsample, wikipedia_start_date, sim_treatment_date, sim_observati
     df = add_has_email_currently(df, wmf_con=wmf_con)
 
     print("adding quality")
-    df = add_num_quality(df, col_name='num_quality_pre_treatment', wmf_con=wmf_con, namespace_fn=lambda ns: True, end_date=sim_treatment_date)
+    df = add_num_quality(df, col_name='num_quality_pre_treatment', wmf_con=wmf_con, namespace_fn=namespace_all, end_date=sim_treatment_date)
     print("adding quality nontalk")
-    df = add_num_quality(df, col_name='num_quality_pre_treatment_non_talk', namespace_fn=lambda ns: ns %2 == 0, end_date=sim_treatment_date, wmf_con=wmf_con)
+    df = add_num_quality(df, col_name='num_quality_pre_treatment_non_talk', namespace_fn=namespace_nontalk, end_date=sim_treatment_date, wmf_con=wmf_con)
     print("adding quality main only")
-    df = add_num_quality(df, col_name='num_quality_pre_treatment_main_only', namespace_fn=lambda ns: ns == 0, end_date=sim_treatment_date, wmf_con=wmf_con)
+    df = add_num_quality(df, col_name='num_quality_pre_treatment_main_only', namespace_fn=namespace_mainonly, end_date=sim_treatment_date, wmf_con=wmf_con)
 
     print('adding 90 pre treatment')
     df = add_edits_fn(df, col_name='num_edits_90_pre_treatment', wmf_con=wmf_con, start_date=sim_observation_start_date,
@@ -378,4 +378,5 @@ if __name__ == "__main__":
                    sim_experiment_end_date=sim_experiment_end_date,
                    wmf_con=wmf_con)
     today_str = dt.today().strftime('%Y%m%d')
-    df.to_csv(f"outputs/thankee_sampling_{subsample}_{today_str}.csv")
+    out_fname =   f'outputs/thankee_power_analysis_data_for_sim_treatment_{sim_treatment_date.strftime("%Y%m%d")}{("_"+str(subsample)+"_subsamples") if subsample else ""}.csv'
+    df.to_csv(os.path.join('outputs', out_fname))

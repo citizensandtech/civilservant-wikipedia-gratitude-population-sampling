@@ -94,3 +94,14 @@ def window_seq(seq, n=2):
     for elem in it:
         result = result[1:] + (elem,)
         yield result
+
+
+def namespace_all(ns):
+    return True
+
+def namespace_nontalk(ns):
+    return ns %2 == 0
+
+def namespace_mainonly(ns):
+    return ns == 0
+
