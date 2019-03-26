@@ -343,18 +343,18 @@ def make_data(subsample, wikipedia_start_date, sim_treatment_date, sim_observati
     print('adding 90 post treatment')
     df = add_edits_fn(df, col_name='num_edits_90_post_treatment', wmf_con=wmf_con, start_date=sim_treatment_date,
                       end_date=sim_experiment_end_date, timestamp_list_fn=len)
-    print('adding labourhours pre treatment')
-    df = add_edits_fn(df, col_name='num_labour_hours_90_pre_treatment', wmf_con=wmf_con, start_date=sim_observation_start_date,
+    print('adding laborhours pre treatment')
+    df = add_edits_fn(df, col_name='num_labor_hours_90_pre_treatment', wmf_con=wmf_con, start_date=sim_observation_start_date,
                       end_date=sim_treatment_date, timestamp_list_fn=calc_labour_hours)
-    print('adding labourhours post treatment')
-    df = add_edits_fn(df, col_name='num_labour_hours_90_post_treatment', wmf_con=wmf_con, start_date=sim_treatment_date,
+    print('adding laborhours post treatment')
+    df = add_edits_fn(df, col_name='num_labor_hours_90_post_treatment', wmf_con=wmf_con, start_date=sim_treatment_date,
                       end_date=sim_experiment_end_date, timestamp_list_fn=calc_labour_hours)
 
     print('adding 90 post treatment by week')
     df = add_edits_fn_by_week(df, col_name='num_edits_90_post_treatment', wmf_con=wmf_con, start_date=sim_treatment_date,
                       end_date=sim_experiment_end_date, timestamp_list_fn=len)
-    print('adding labourhours post treatment')
-    df = add_edits_fn_by_week(df, col_name='num_labour_hours_90_post_treatment', wmf_con=wmf_con, start_date=sim_treatment_date,
+    print('adding laborhours post treatment')
+    df = add_edits_fn_by_week(df, col_name='num_labor_hours_90_post_treatment', wmf_con=wmf_con, start_date=sim_treatment_date,
                       end_date=sim_experiment_end_date, timestamp_list_fn=calc_labour_hours)
 
 
