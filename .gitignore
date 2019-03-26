@@ -4,8 +4,20 @@ cache/*
 
 \.ipynb_checkpoints/
 
-outputs/
+# outputs/
 
 *.sh~
 
 \.env
+
+\.env~
+
+tests/test_data/con_responses/
+
+__pycache__/
+
+*.json#
+
+config/replica\.my\.cnf
+
+data/
