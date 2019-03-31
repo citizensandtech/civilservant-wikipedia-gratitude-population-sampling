@@ -1,0 +1,13 @@
+langs:
+  - ar
+  - de
+  - fa
+  - pl
+
+groups:
+  newcomer:
+    target_size: 200
+  experienced:
+    target_size: 400
+
+experiment_start_date: 2019-04-01

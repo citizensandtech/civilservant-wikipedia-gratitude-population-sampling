@@ -11,40 +11,6 @@ from cached_df import make_cached_df
 
 from datetime import datetime as dt
 from datetime import timedelta as td
-from IPython import embed
-
-
-def sample_thankees_group_oriented(lang, db_con):
-    """
-        leaving this stub here because eventually i want to first start from what groups need
-        :param lang:
-        :param db_con:
-        :return:
-        """
-    # load target group sizes
-    # figure out which groups need more users
-
-    # sample active users
-    # remove users w/ < n edits
-    # remove editors in
-
-
-def get_active_users(lang, start_date, end_date, min_rev_id, wmf_con):
-    """
-    Return the first and last edits of only active users in `lang`wiki
-    between the start_date and end_date.
-    """
-    raise NotImplementedError
-    wmf_con.execute(f'use {lang}wiki_p;')
-    active_sql = """select distinct(rev_user) from revision 
-    where {start_date} <= rev_timestamp and rev_timestamp <= {end_date}
-    and rev_id > {min_rev_id}
-    ;
-                """.format(start_date=to_wmftimestamp(start_date),
-                           end_date=to_wmftimestamp(end_date),
-                           lang=lang, min_rev_id=min_rev_id)
-    active_df = pd.read_sql(active_sql, con)
-    return active_df
 
 
 def output_bin_stats(df):
@@ -160,7 +126,7 @@ def add_thanks(df, start_date, end_date, col_name, wmf_con):
     return df
 
 
-def add_num_quality(df, col_name, namespace_fn, end_date, wmf_con):
+def add_num_quality(df: object, col_name: object, namespace_fn: object, end_date: object, wmf_con: object) -> object:
     """note this get thes the number of quality revisions that are 90 days before users last edit before the end_date
     so, it's different than num_edits_90_pre_treatment because it could go farther back"""
     num_quality_dfs = []
