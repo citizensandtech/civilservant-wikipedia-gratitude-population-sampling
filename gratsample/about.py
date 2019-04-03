@@ -1,0 +1,7 @@
+__name__ = "gratitude_sampling"
+__version__ = "0.0.1"
+__author__ = "Max Klein"
+__author_email__ = "max@notconfusing.com"
+__description__ = "get users to be in a civilservant gratitude experiment"
+__url__ = "https://github.com/notconfusing/civilservant-wikipedia-gratitude-sampling"
+__license__ = "MIT"

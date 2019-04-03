@@ -1,13 +1,13 @@
 import sqlalchemy
 
-from sample_thankees_revision_utils import num_quality_revisions, get_timestamps_within_range, get_recent_edits, \
+from gratsample.sample_thankees_revision_utils import num_quality_revisions, get_timestamps_within_range, \
     get_recent_edits_alias
-from wikipedia_helpers import to_wmftimestamp, from_wmftimestamp, decode_or_nan, make_wmf_con, calc_labour_hours, \
-    ts_in_week, window_seq, namespace_all, namespace_mainonly, namespace_nontalk
+from gratsample.wikipedia_helpers import to_wmftimestamp, from_wmftimestamp, decode_or_nan, make_wmf_con, calc_labour_hours, \
+    ts_in_week, namespace_all, namespace_mainonly, namespace_nontalk
 
-import sys, os
+import os
 import pandas as pd
-from cached_df import make_cached_df
+from gratsample.cached_df import make_cached_df
 
 from datetime import datetime as dt
 from datetime import timedelta as td

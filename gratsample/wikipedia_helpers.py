@@ -3,6 +3,10 @@ from datetime import datetime as dt, timedelta as td
 from sqlalchemy import create_engine
 from itertools import islice
 
+from sqlalchemy.orm import sessionmaker
+
+from gratsample.orm_models import Base
+
 
 def from_wmftimestamp(bytestring):
     if bytestring:
@@ -19,15 +23,33 @@ def to_wmftimestamp(date):
 def decode_or_nan(b):
     return b.decode('utf-8') if b else float('nan')
 
-
-def make_wmf_con():
-    constr = 'mysql+pymysql://{user}:{pwd}@{host}:{port}/?charset=utf8'.format(user=os.environ['MYSQL_USERNAME'],
-                                                                               pwd=os.environ['MYSQL_PASSWORD'],
-                                                                               host=os.environ['MYSQL_HOST'],
-                                                                               port=os.environ['MYSQL_PORT'])
+def make_a_con(user, pwd, host, port):
+    constr = 'mysql+pymysql://{user}:{pwd}@{host}:{port}/?charset=utf8'.format(user=user, pwd=pwd, host=host, port=port)
 
     con = create_engine(constr, encoding='utf-8')
     return con
+
+def make_wmf_con():
+    return make_a_con(user=os.environ['WMF_MYSQL_USERNAME'],
+                      pwd=os.environ['WMF_MYSQL_PASSWORD'],
+                      host=os.environ['WMF_MYSQL_HOST'],
+                      port=os.environ['WMF_MYSQL_PORT'])
+
+def load_session_from_con(con):
+    Base.metadata.bind = con
+    DBSession = sessionmaker(bind=con)
+    db_session = DBSession()
+    return db_session
+
+
+def make_interal_con():
+    return make_a_con(user=os.environ['LOCAL_MYSQL_USERNAME'],
+                      pwd=os.environ['LOCAL_MYSQL_PASSWORD'],
+                      host=os.environ['LOCAL_MYSQL_HOST'],
+                      port=os.environ['LOCAL_MYSQL_PORT'])
+
+def make_internal_db_session():
+    return load_session_from_con(make_interal_con())
 
 
 def make_sessions(ts_list):

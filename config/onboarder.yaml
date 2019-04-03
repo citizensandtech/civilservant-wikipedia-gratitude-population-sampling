@@ -1,8 +1,14 @@
+# these min revs are determined by finding the earliest revisions in 2019 https://quarry.wmflabs.org/query/34842
 langs:
-  - ar
-  - de
-  - fa
-  - pl
+  ar:
+    min_rev_id: 32457280
+  de:
+    min_rev_id: 184258647
+  fa:
+    min_rev_id: 25156442
+  pl:
+    min_rev_id: 55469079
+
 
 groups:
   newcomer:

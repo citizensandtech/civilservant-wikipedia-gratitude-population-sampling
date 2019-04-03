@@ -13,12 +13,13 @@
 + thanks_sent (num thanks sent on wiki)
 + thanks_received (num thanks received on wiki)
 + has_email (user can be emailed via wiki)
++ user_thanked (whether this user has been thanked yet)
 
 ## randomizations
 ### many-1 to candidate
 + randomization_id (internal)
 + cand_id (foreign key)
-+ condition (enum[non-in-experiment, thankee, placebo])
++ condition (enum[not-in-experiment, thankee, placebo])
 + condition_created_at (date)
 
 ## edits

@@ -1,10 +1,11 @@
 import json
 import os
-from unittest.mock import MagicMock as Mock, patch
+from unittest.mock import patch
 import pytest
 import pandas as pd
-from sample_thankees_revision_utils import num_quality_revisions, refresh_revisions, get_display_data
-import mwapi
+from gratsample.sample_thankees_revision_utils import num_quality_revisions, get_display_data
+
+
 def load_path_files_to_dict(sub_dirname, filetype):
     sub_dir = os.path.join('test_data', sub_dirname)
     reader_fn = {'.json': lambda f: json.load(open(os.path.join(sub_dir, f), 'r')),

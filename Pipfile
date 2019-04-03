@@ -20,7 +20,7 @@ mwtypes = "*"
 matplotlib = "*"
 ores = "*"
 scipy = "*"
-
+mysqlclient = "*"
 
 [requires]
 python_version = "3.7"

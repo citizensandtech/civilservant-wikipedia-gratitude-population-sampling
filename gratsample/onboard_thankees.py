@@ -1,20 +1,17 @@
 import sqlalchemy
 import yaml
 
-from sample_thankees import make_populations, remove_inactive_users, add_experience_bin, add_edits_fn, \
-    remove_with_min_edit_count, add_thanks, add_total_edits, add_has_email_currently, add_num_quality
-from sample_thankees_revision_utils import num_quality_revisions, get_timestamps_within_range, get_recent_edits, \
-    get_recent_edits_alias
-from wikipedia_helpers import to_wmftimestamp, from_wmftimestamp, decode_or_nan, make_wmf_con, calc_labour_hours, \
-    ts_in_week, window_seq, namespace_all, namespace_mainonly, namespace_nontalk
+from gratsample.sample_thankees import make_populations, remove_inactive_users, add_experience_bin, add_edits_fn, \
+    remove_with_min_edit_count, add_thanks, add_has_email_currently, add_num_quality, \
+    stratified_subsampler
+from gratsample.sample_thankees_revision_utils import get_recent_edits_alias
+from gratsample.wikipedia_helpers import to_wmftimestamp, make_wmf_con, namespace_all, namespace_mainonly, namespace_nontalk
 
-import sys, os
+import os
 import pandas as pd
-from cached_df import make_cached_df
+from gratsample.cached_df import make_cached_df
 
-from datetime import datetime as dt
-from datetime import timedelta as td
-from IPython import embed
+from datetime import timedelta, datetime
 
 
 def sample_thankees_group_oriented(lang, db_con):
@@ -31,22 +28,24 @@ def sample_thankees_group_oriented(lang, db_con):
     # remove users w/ < n edits
     # remove editors in
 
-
+@make_cached_df('active_users')
 def get_active_users(lang, start_date, end_date, min_rev_id, wmf_con):
     """
     Return the first and last edits of only active users in `lang`wiki
     between the start_date and end_date.
     """
-    raise NotImplementedError
     wmf_con.execute(f'use {lang}wiki_p;')
-    active_sql = """select distinct(rev_user) from revision 
-    where {start_date} <= rev_timestamp and rev_timestamp <= {end_date}
-    and rev_id > {min_rev_id}
-    ;
-                """.format(start_date=to_wmftimestamp(start_date),
-                           end_date=to_wmftimestamp(end_date),
-                           lang=lang, min_rev_id=min_rev_id)
-    active_df = pd.read_sql(active_sql, con)
+
+    active_sql = """select user_id, user_name, user_registration, user_editcount as live_edit_count
+                        from (select distinct(rev_user) from revision 
+                            where rev_timestamp >= :start_date and rev_timestamp <= :end_date
+                            and rev_id > :min_rev_id) active_users
+                        join user on active_users.rev_user=user.user_id;"""
+    active_sql_esc = sqlalchemy.text(active_sql)
+    params = {"start_date":int(to_wmftimestamp(start_date)),
+              "end_date":int(to_wmftimestamp(end_date)),
+              "min_rev_id":min_rev_id}
+    active_df = pd.read_sql(active_sql_esc, con=wmf_con, params=params)
     return active_df
 
 
@@ -101,8 +100,6 @@ def make_data(subsample, wikipedia_start_date, sim_treatment_date, sim_observati
     print("adding quality main only")
     df = add_num_quality(df, col_name='num_quality_pre_treatment_main_only', namespace_fn=namespace_mainonly, end_date=sim_treatment_date, wmf_con=wmf_con)
 
-
-
     print('done')
     return df
 
@@ -112,20 +109,33 @@ class thankeeOnboarder():
         """
         config = yaml.load(open(os.path.join('config', config_file), 'r'))
         self.groups = config['groups']
+        self.langs = config['langs']
         self.wmf_con = make_wmf_con()
-
+        self.onboarding_earliest_active_date = config['experiment_start_date'] - timedelta(days=90)
+        self.onboarding_latest_active_date = datetime.utcnow()
+        self.populations = {}
 
     def sample_populations_per_language(self):
         """
+        - for incomplete groups:
         - sample active users
         - remove users with less than n edits
         - remove editors in thanker experiment
-        - assign experince level (once only)
+        - assign experience level (once only)
         - update/insert candidates
         - iterative representative sampling
         - add thanks history
         - add emailable status
         """
+        for lang in self.langs.keys():
+            print('db')
+            print(self.wmf_con.execute('show databases;'))
+            df = get_active_users(lang, start_date=self.onboarding_earliest_active_date,
+                                  end_date=self.onboarding_latest_active_date,
+                                  min_rev_id=self.langs[lang]['min_rev_id'],
+                                  wmf_con=self.wmf_con)
+            self.populations[lang] = df
+
 
     def iterative_representative_sampling(self):
         """
