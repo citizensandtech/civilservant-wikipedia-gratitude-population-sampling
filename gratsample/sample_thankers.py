@@ -78,13 +78,14 @@ con.execute(f'use enwiki_p;')
 # de_is_edits_enough (binary): has the user more than 300 edits
 # pl_is_editor (binary): does this account have flagged revisions permission on PL Wikipedia?  If the account isn't from that language, the value should be NA
 # fa_is_days_enough (binary): is 365 days or more registered
-# fa_is_edits_enough (binary): is 500 edits or more 
+# fa_is_edits_enough (binary): is 500 edits or more
 DE_EDITS_ENOUGH = 300
 DE_DAYS_ENOUGH = 60
 FA_EDITS_ENOUGH = 500
 FA_DAYS_ENOUGH = 365
 
-de_pop_sql = """select user_id, ug_group, user_name, user_editcount, user_registration from (
+de_pop_sql = """select user_id, ug_group, user_name, user_editcount, user_registration,
+    (select max(rev_timestamp) from revision_userindex where rev_user = user_id) as most_recent_edit from (
     select user_id, ug_group, user_name, user_editcount, coalesce(user_registration, 20010101000000) as user_registration
           from (select * from user_groups where ug_group = 'autoreview') ug
 join user u on  ug.ug_user = u.user_id) coal
@@ -93,7 +94,9 @@ where user_editcount >= {DE_EDITS_ENOUGH} and user_registration <= {reg_start};
                DE_EDITS_ENOUGH=DE_EDITS_ENOUGH)
 
 fa_pop_sql = """select * from (
-    select user_id, user_name, user_editcount, coalesce(user_registration, 20010101000000) as user_registration from user) u
+    select user_id, user_name, user_editcount, coalesce(user_registration, 20010101000000) as user_registration, 
+    (select max(rev_timestamp) from revision_userindex where rev_user = user_id) as most_recent_edit 
+    from user) u
                     where user_editcount >= {FA_EDITS_ENOUGH} and user_registration <= {reg_start};
     """.format(reg_start=(sim_treatment_date - td(days=FA_DAYS_ENOUGH)).strftime('%Y%m%d%H%M%S'),
                FA_EDITS_ENOUGH=FA_EDITS_ENOUGH)
@@ -101,7 +104,8 @@ fa_pop_sql = """select * from (
 
 def user_group_members(user_group):
     return """select * from (
-select user_id, user_name, ug_group, coalesce(user_registration, 20010101000000) as user_registration 
+select user_id, user_name, ug_group, coalesce(user_registration, 20010101000000) as user_registration,
+(select max(rev_timestamp) from revision_userindex where rev_user = user_id) as most_recent_edit
 from (select * from user_groups where ug_group = '{user_group}') ug
   join user u on ug.ug_user = u.user_id) coalesced
   where user_registration <= {reg_start};""".format(reg_start=sim_treatment_date.strftime('%Y%m%d%H%M%S'),
@@ -117,14 +121,15 @@ lang_sqlparams = {'de': {'pop_sql': de_pop_sql,
 
 
 def create_thanker_pop(lang, pop_sql, true_cols_to_add):
-    cache_key = f'cache/pops/{lang}'
+    cache_key = f'../cache/pops/{lang}'
+    print(f'working on pop for {cache_key}')
     if os.path.exists(cache_key):
         return pd.read_pickle(cache_key)
     else:
         con.execute(f'use {lang}wiki_p;')
         df = pd.read_sql(pop_sql, con)
         decode_cols = ['ug_group', 'user_name', ]
-        timestamp_cols = ['user_registration']
+        timestamp_cols = ['user_registration', 'most_recent_edit']
         for decode_col in decode_cols:
             try:
                 df[decode_col] = df[decode_col].apply(decode_or_none)
@@ -145,7 +150,7 @@ def create_thanker_pop(lang, pop_sql, true_cols_to_add):
 
 # BLOCKS (aka. Bans)
 def get_bans(lang, start_date, end_date):
-    cache_key = f'cache/bans/{lang}_{start_date}_{end_date}.pickle'
+    cache_key = f'../cache/bans/{lang}_{start_date}_{end_date}.pickle'
     if not os.path.exists(cache_key):
         start_stamp = start_date.strftime('%Y%m%d%H%M%S')
         end_stamp = end_date.strftime('%Y%m%d%H%M%S')
@@ -201,7 +206,7 @@ def add_blocks_post_treatment(df):
 
 # Just cache user histories
 def get_user_edits(lang, user_id, start_date, end_date):
-    cache_key = f'cache/edithistory/{lang}_{user_id}_{start_date}_{end_date}.pickle'
+    cache_key = f'../cache/edithistory/{lang}_{user_id}_{start_date}_{end_date}.pickle'
     if not os.path.exists(cache_key):
         start_stamp = start_date.strftime('%Y%m%d%H%M%S')
         end_stamp = end_date.strftime('%Y%m%d%H%M%S')
@@ -242,7 +247,7 @@ def cache_all_user_edits(df):
 
 
 def get_num_reverts(lang, user_id, user_df, start_date, end_date, schema):
-    cache_key = f'cache/reverts/{lang}_{user_id}_{start_date}_{end_date}.pickle'
+    cache_key = f'../cache/reverts/{lang}_{user_id}_{start_date}_{end_date}.pickle'
     if os.path.exists(cache_key):
         return pd.read_pickle(cache_key)
     else:
@@ -266,8 +271,9 @@ def get_num_reverts(lang, user_id, user_df, start_date, end_date, schema):
 
 
 def get_schema(lang):
-    return mwdb.Schema(f"mysql+pymysql://{lang}wiki.labsdb/{lang}wiki_p?read_default_file=~/replica.my.cnf",
+    return mwdb.Schema(f"mysql+pymysql://{os.environ['MYSQL_HOST']}:{os.environ['MYSQL_PORT']}/{lang}wiki_p?read_default_file=~/replica.my.cnf",
                        only_tables=['revision'])
+
 
 
 def create_reverts_df(df, start_date, end_date):
@@ -393,7 +399,7 @@ class preloaded_csvs():
 
 
 def get_num_grats(lang, user_id, user_df, start_date, end_date, grat_type, preloaded):
-    cache_key = f'cache/{grat_type}/{lang}_{user_id}_{start_date}_{end_date}.pickle'
+    cache_key = f'../cache/{grat_type}/{lang}_{user_id}_{start_date}_{end_date}.pickle'
     if os.path.exists(cache_key):
         return pd.read_pickle(cache_key)
     else:
@@ -479,11 +485,20 @@ def get_populations():
     del lang_dfs
     return df
 
+def remove_inactive_users(df):
+    return df[df['most_recent_edit'] >= sim_observation_start_date]
+
 
 def make_data(subsample=None):
     print('starting to make data')
     print('making populations')
     df = get_populations()
+    print(f'group sizes, all eligible')
+    print(df.groupby('lang').size())
+
+    df = remove_inactive_users(df)
+    print(f'group sizes, all eligible')
+    print(df.groupby('lang').size())
     if subsample:
         print(f'subsetting to {subsample} samples')
         df = df.sample(n=subsample, random_state=1854)
@@ -527,4 +542,5 @@ if __name__ == "__main__":
     GRAT_DIR = conf["GRAT_DIR"]
     df = make_data(conf['subsample'])
     df.to_csv(
-        f'outputs/thanker_power_analysis_data_for_sim_treatment_{sim_treatment_date.strftime("%Y%m%d")}{("_"+str(subsample)+"_subsamples") if subsample else ""}.csv')
+        f'outputs/thanker_power_analysis_data_for_sim_treatment_{sim_treatment_date.strftime("%Y%m%d")}'
+        f'{("_"+str(subsample)+"_subsamples") if subsample else ""}.csv')

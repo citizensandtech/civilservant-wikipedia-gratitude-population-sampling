@@ -129,6 +129,9 @@ def add_thanks(df, start_date, end_date, col_name, wmf_con):
 def add_num_quality(df: object, col_name: object, namespace_fn: object, end_date: object, wmf_con: object) -> object:
     """note this get thes the number of quality revisions that are 90 days before users last edit before the end_date
     so, it's different than num_edits_90_pre_treatment because it could go farther back"""
+
+
+
     num_quality_dfs = []
     for lang in langs:
         user_ids = df[df['lang'] == lang]['user_id'].values
