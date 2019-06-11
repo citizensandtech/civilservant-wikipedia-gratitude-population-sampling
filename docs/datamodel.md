@@ -52,7 +52,8 @@
 + oldRevComment
 
 ## worksets
-###
+### noted
+because of the ability to skip a task, worksets either need to be prepared to change dynamically, or we might need to abandon the concept, and have tasks have 'completed/checked-out' attributes.
 + workset_id
 + task_id
 
